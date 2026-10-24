@@ -1,0 +1,704 @@
+[
+  {
+    "name": "person",
+    "mode": "scene",
+    "aliases": [
+      "person"
+    ]
+  },
+  {
+    "name": "bicycle",
+    "mode": "scene",
+    "aliases": [
+      "bicycle"
+    ]
+  },
+  {
+    "name": "car",
+    "mode": "scene",
+    "aliases": [
+      "car"
+    ]
+  },
+  {
+    "name": "motorcycle",
+    "mode": "scene",
+    "aliases": [
+      "motorcycle"
+    ]
+  },
+  {
+    "name": "airplane",
+    "mode": "scene",
+    "aliases": [
+      "airplane"
+    ]
+  },
+  {
+    "name": "bus",
+    "mode": "scene",
+    "aliases": [
+      "bus"
+    ]
+  },
+  {
+    "name": "train",
+    "mode": "scene",
+    "aliases": [
+      "train"
+    ]
+  },
+  {
+    "name": "truck",
+    "mode": "scene",
+    "aliases": [
+      "truck"
+    ]
+  },
+  {
+    "name": "boat",
+    "mode": "scene",
+    "aliases": [
+      "boat"
+    ]
+  },
+  {
+    "name": "traffic light",
+    "mode": "scene",
+    "aliases": [
+      "traffic light"
+    ]
+  },
+  {
+    "name": "fire hydrant",
+    "mode": "scene",
+    "aliases": [
+      "fire hydrant"
+    ]
+  },
+  {
+    "name": "stop sign",
+    "mode": "scene",
+    "aliases": [
+      "stop sign"
+    ]
+  },
+  {
+    "name": "parking meter",
+    "mode": "scene",
+    "aliases": [
+      "parking meter"
+    ]
+  },
+  {
+    "name": "bench",
+    "mode": "scene",
+    "aliases": [
+      "bench"
+    ]
+  },
+  {
+    "name": "bird",
+    "mode": "scene",
+    "aliases": [
+      "bird"
+    ]
+  },
+  {
+    "name": "cat",
+    "mode": "scene",
+    "aliases": [
+      "cat"
+    ]
+  },
+  {
+    "name": "dog",
+    "mode": "scene",
+    "aliases": [
+      "dog"
+    ]
+  },
+  {
+    "name": "horse",
+    "mode": "scene",
+    "aliases": [
+      "horse"
+    ]
+  },
+  {
+    "name": "sheep",
+    "mode": "scene",
+    "aliases": [
+      "sheep"
+    ]
+  },
+  {
+    "name": "cow",
+    "mode": "scene",
+    "aliases": [
+      "cow"
+    ]
+  },
+  {
+    "name": "elephant",
+    "mode": "scene",
+    "aliases": [
+      "elephant"
+    ]
+  },
+  {
+    "name": "bear",
+    "mode": "scene",
+    "aliases": [
+      "bear"
+    ]
+  },
+  {
+    "name": "zebra",
+    "mode": "scene",
+    "aliases": [
+      "zebra"
+    ]
+  },
+  {
+    "name": "giraffe",
+    "mode": "scene",
+    "aliases": [
+      "giraffe"
+    ]
+  },
+  {
+    "name": "backpack",
+    "mode": "scene",
+    "aliases": [
+      "backpack"
+    ]
+  },
+  {
+    "name": "umbrella",
+    "mode": "scene",
+    "aliases": [
+      "umbrella"
+    ]
+  },
+  {
+    "name": "handbag",
+    "mode": "scene",
+    "aliases": [
+      "handbag"
+    ]
+  },
+  {
+    "name": "tie",
+    "mode": "scene",
+    "aliases": [
+      "tie"
+    ]
+  },
+  {
+    "name": "suitcase",
+    "mode": "scene",
+    "aliases": [
+      "suitcase"
+    ]
+  },
+  {
+    "name": "frisbee",
+    "mode": "scene",
+    "aliases": [
+      "frisbee"
+    ]
+  },
+  {
+    "name": "skis",
+    "mode": "scene",
+    "aliases": [
+      "skis"
+    ]
+  },
+  {
+    "name": "snowboard",
+    "mode": "scene",
+    "aliases": [
+      "snowboard"
+    ]
+  },
+  {
+    "name": "sports ball",
+    "mode": "scene",
+    "aliases": [
+      "sports ball"
+    ]
+  },
+  {
+    "name": "kite",
+    "mode": "scene",
+    "aliases": [
+      "kite"
+    ]
+  },
+  {
+    "name": "baseball bat",
+    "mode": "scene",
+    "aliases": [
+      "baseball bat"
+    ]
+  },
+  {
+    "name": "baseball glove",
+    "mode": "scene",
+    "aliases": [
+      "baseball glove"
+    ]
+  },
+  {
+    "name": "skateboard",
+    "mode": "scene",
+    "aliases": [
+      "skateboard"
+    ]
+  },
+  {
+    "name": "surfboard",
+    "mode": "scene",
+    "aliases": [
+      "surfboard"
+    ]
+  },
+  {
+    "name": "tennis racket",
+    "mode": "scene",
+    "aliases": [
+      "tennis racket"
+    ]
+  },
+  {
+    "name": "bottle",
+    "mode": "scene",
+    "aliases": [
+      "bottle"
+    ]
+  },
+  {
+    "name": "wine glass",
+    "mode": "scene",
+    "aliases": [
+      "wine glass"
+    ]
+  },
+  {
+    "name": "cup",
+    "mode": "scene",
+    "aliases": [
+      "cup"
+    ]
+  },
+  {
+    "name": "fork",
+    "mode": "scene",
+    "aliases": [
+      "fork"
+    ]
+  },
+  {
+    "name": "knife",
+    "mode": "scene",
+    "aliases": [
+      "knife"
+    ]
+  },
+  {
+    "name": "spoon",
+    "mode": "scene",
+    "aliases": [
+      "spoon"
+    ]
+  },
+  {
+    "name": "bowl",
+    "mode": "scene",
+    "aliases": [
+      "bowl"
+    ]
+  },
+  {
+    "name": "banana",
+    "mode": "scene",
+    "aliases": [
+      "banana"
+    ]
+  },
+  {
+    "name": "apple",
+    "mode": "scene",
+    "aliases": [
+      "apple"
+    ]
+  },
+  {
+    "name": "sandwich",
+    "mode": "scene",
+    "aliases": [
+      "sandwich"
+    ]
+  },
+  {
+    "name": "orange",
+    "mode": "scene",
+    "aliases": [
+      "orange"
+    ]
+  },
+  {
+    "name": "broccoli",
+    "mode": "scene",
+    "aliases": [
+      "broccoli"
+    ]
+  },
+  {
+    "name": "carrot",
+    "mode": "scene",
+    "aliases": [
+      "carrot"
+    ]
+  },
+  {
+    "name": "hot dog",
+    "mode": "scene",
+    "aliases": [
+      "hot dog"
+    ]
+  },
+  {
+    "name": "pizza",
+    "mode": "scene",
+    "aliases": [
+      "pizza"
+    ]
+  },
+  {
+    "name": "donut",
+    "mode": "scene",
+    "aliases": [
+      "donut"
+    ]
+  },
+  {
+    "name": "cake",
+    "mode": "scene",
+    "aliases": [
+      "cake"
+    ]
+  },
+  {
+    "name": "chair",
+    "mode": "scene",
+    "aliases": [
+      "chair"
+    ]
+  },
+  {
+    "name": "couch",
+    "mode": "scene",
+    "aliases": [
+      "couch"
+    ]
+  },
+  {
+    "name": "potted plant",
+    "mode": "scene",
+    "aliases": [
+      "potted plant"
+    ]
+  },
+  {
+    "name": "bed",
+    "mode": "scene",
+    "aliases": [
+      "bed"
+    ]
+  },
+  {
+    "name": "dining table",
+    "mode": "scene",
+    "aliases": [
+      "dining table"
+    ]
+  },
+  {
+    "name": "toilet",
+    "mode": "scene",
+    "aliases": [
+      "toilet"
+    ]
+  },
+  {
+    "name": "tv",
+    "mode": "scene",
+    "aliases": [
+      "tv"
+    ]
+  },
+  {
+    "name": "laptop",
+    "mode": "scene",
+    "aliases": [
+      "laptop"
+    ]
+  },
+  {
+    "name": "mouse",
+    "mode": "scene",
+    "aliases": [
+      "mouse"
+    ]
+  },
+  {
+    "name": "remote",
+    "mode": "scene",
+    "aliases": [
+      "remote"
+    ]
+  },
+  {
+    "name": "keyboard",
+    "mode": "scene",
+    "aliases": [
+      "keyboard"
+    ]
+  },
+  {
+    "name": "cell phone",
+    "mode": "scene",
+    "aliases": [
+      "cell phone"
+    ]
+  },
+  {
+    "name": "microwave",
+    "mode": "scene",
+    "aliases": [
+      "microwave"
+    ]
+  },
+  {
+    "name": "oven",
+    "mode": "scene",
+    "aliases": [
+      "oven"
+    ]
+  },
+  {
+    "name": "toaster",
+    "mode": "scene",
+    "aliases": [
+      "toaster"
+    ]
+  },
+  {
+    "name": "sink",
+    "mode": "scene",
+    "aliases": [
+      "sink"
+    ]
+  },
+  {
+    "name": "refrigerator",
+    "mode": "scene",
+    "aliases": [
+      "refrigerator"
+    ]
+  },
+  {
+    "name": "book",
+    "mode": "scene",
+    "aliases": [
+      "book"
+    ]
+  },
+  {
+    "name": "clock",
+    "mode": "scene",
+    "aliases": [
+      "clock"
+    ]
+  },
+  {
+    "name": "vase",
+    "mode": "scene",
+    "aliases": [
+      "vase"
+    ]
+  },
+  {
+    "name": "scissors",
+    "mode": "scene",
+    "aliases": [
+      "scissors"
+    ]
+  },
+  {
+    "name": "teddy bear",
+    "mode": "scene",
+    "aliases": [
+      "teddy bear"
+    ]
+  },
+  {
+    "name": "hair drier",
+    "mode": "scene",
+    "aliases": [
+      "hair drier"
+    ]
+  },
+  {
+    "name": "toothbrush",
+    "mode": "scene",
+    "aliases": [
+      "toothbrush"
+    ]
+  },
+  {
+    "name": "helmet",
+    "mode": "focus",
+    "aliases": [
+      "crash helmet",
+      "football helmet"
+    ]
+  },
+  {
+    "name": "hammer",
+    "mode": "focus",
+    "aliases": [
+      "hammer"
+    ]
+  },
+  {
+    "name": "screwdriver",
+    "mode": "focus",
+    "aliases": [
+      "screwdriver"
+    ]
+  },
+  {
+    "name": "power drill",
+    "mode": "focus",
+    "aliases": [
+      "power drill"
+    ]
+  },
+  {
+    "name": "wallet",
+    "mode": "focus",
+    "aliases": [
+      "wallet"
+    ]
+  },
+  {
+    "name": "sunglasses",
+    "mode": "focus",
+    "aliases": [
+      "sunglass",
+      "sunglasses"
+    ]
+  },
+  {
+    "name": "digital watch",
+    "mode": "focus",
+    "aliases": [
+      "digital watch"
+    ]
+  },
+  {
+    "name": "microphone",
+    "mode": "focus",
+    "aliases": [
+      "microphone"
+    ]
+  },
+  {
+    "name": "modem",
+    "mode": "focus",
+    "aliases": [
+      "modem"
+    ]
+  },
+  {
+    "name": "binoculars",
+    "mode": "focus",
+    "aliases": [
+      "binoculars"
+    ]
+  },
+  {
+    "name": "accordion",
+    "mode": "focus",
+    "aliases": [
+      "accordion"
+    ]
+  },
+  {
+    "name": "padlock",
+    "mode": "focus",
+    "aliases": [
+      "padlock"
+    ]
+  },
+  {
+    "name": "stethoscope",
+    "mode": "focus",
+    "aliases": [
+      "stethoscope"
+    ]
+  },
+  {
+    "name": "iron",
+    "mode": "focus",
+    "aliases": [
+      "iron"
+    ]
+  },
+  {
+    "name": "perfume",
+    "mode": "focus",
+    "aliases": [
+      "perfume"
+    ]
+  },
+  {
+    "name": "paintbrush",
+    "mode": "focus",
+    "aliases": [
+      "paintbrush"
+    ]
+  },
+  {
+    "name": "pencil sharpener",
+    "mode": "focus",
+    "aliases": [
+      "pencil sharpener"
+    ]
+  },
+  {
+    "name": "rubber eraser",
+    "mode": "focus",
+    "aliases": [
+      "rubber eraser"
+    ]
+  },
+  {
+    "name": "syringe",
+    "mode": "focus",
+    "aliases": [
+      "syringe"
+    ]
+  },
+  {
+    "name": "combination lock",
+    "mode": "focus",
+    "aliases": [
+      "combination lock"
+    ]
+  }
+]

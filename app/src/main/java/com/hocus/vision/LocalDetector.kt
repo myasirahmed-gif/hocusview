@@ -52,13 +52,13 @@ class LocalDetector(context: Context) : AutoCloseable {
             return (0 until count).mapNotNull { index ->
                 val score = scores.get(index)
                 val label = labels.getOrNull(classes.get(index).toInt()) ?: "Object"
-                if (score < 0.45f || label == "???") return@mapNotNull null
+                if (score < 0.30f || label == "???") return@mapNotNull null
                 val top = boxes.get(index * 4).coerceIn(0f, 1f) * bitmap.height
                 val left = boxes.get(index * 4 + 1).coerceIn(0f, 1f) * bitmap.width
                 val bottom = boxes.get(index * 4 + 2).coerceIn(0f, 1f) * bitmap.height
                 val right = boxes.get(index * 4 + 3).coerceIn(0f, 1f) * bitmap.width
                 if (right <= left || bottom <= top) null else Target(RectF(left, top, right, bottom), null, label, score)
-            }.sortedByDescending { it.confidence }.take(8)
+            }.sortedByDescending { it.confidence }.take(12)
         } finally {
             if (resized !== bitmap) resized.recycle()
         }
