@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -37,11 +38,13 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONObject
 
 data class Target(val bounds: android.graphics.RectF, val id: Int?, val label: String, val confidence: Float?,
     val predicted: Boolean = false, val hits: Int = 1)
 private data class Capture(val id: Int, val image: Bitmap, val vector: FloatArray, val name: String,
     val subtitle: String, val confidence: Float, val time: Long)
+private data class SceneFrame(val image: Bitmap, val light: Float, val time: Long)
 
 class MainActivity : ComponentActivity() {
     private val cyan = Color.rgb(104, 243, 224)
@@ -60,6 +63,25 @@ class MainActivity : ComponentActivity() {
     private lateinit var permissionButton: TextView
     private lateinit var pauseButton: TextView
     private lateinit var assistButton: TextView
+    private lateinit var nightButton: TextView
+    private lateinit var lampButton: TextView
+    private lateinit var platePopup: TextView
+    private lateinit var expandedTools: LinearLayout
+    @Volatile private var nightMode = false
+    private var lampOn = false
+    private var sceneFrame: SceneFrame? = null
+    private var lastSceneAt = 0L
+    private var nightConfigVersion = 0
+    private val networkWorker = Executors.newSingleThreadExecutor()
+    private val onlineBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val apiStore by lazy { ApiKeyStore(this) }
+    private val gemini by lazy { GeminiClient() }
+    private val plateDelegate = lazy { PlateScanner { reading -> uiExecutor.execute { if (!disposed && scanning) receivePlate(reading) } } }
+    private val plates by plateDelegate
+    private val plateReadings = mutableMapOf<Int, PlateReading>()
+    private var platePopupKey = ""
+    private var plateMutedUntil = 0L
+    private var plateHide: Runnable? = null
     private var camera: Camera? = null
     private var provider: ProcessCameraProvider? = null
     private var analysis: ImageAnalysis? = null
@@ -99,6 +121,7 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         assisted = getPreferences(MODE_PRIVATE).getBoolean("assisted", true)
+        nightMode = getPreferences(MODE_PRIVATE).getBoolean("night", false)
         buildInterface()
         executor.execute {
             try {
@@ -130,51 +153,53 @@ class MainActivity : ComponentActivity() {
         root.addView(hud, FrameLayout.LayoutParams(-1, -1))
         val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val brandRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        brandRow.addView(label("+", 27f, cyan).apply {
+        brandRow.addView(label("+", 22f, cyan).apply {
             gravity = Gravity.CENTER; background = surface(0xCC0A202A.toInt(), 12, cyan)
-        }, LinearLayout.LayoutParams(dp(44), dp(44)))
-        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-        brand.addView(label("HOCUS VISION", 19f, white).apply {
+        }, LinearLayout.LayoutParams(dp(32), dp(32)))
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, 0, 0) }
+        brand.addView(label("HOCUS VISION", 15f, white).apply {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); letterSpacing = 0.08f
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         })
-        brand.addView(micro("OPTICAL INTERFACE  /  02", muted))
+        brand.addView(micro("VISION + GEMINI  /  03", muted).apply { textSize = 7f })
         brandRow.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
         pauseButton = action("PAUSE", false) { toggleScanning() }
-        brandRow.addView(pauseButton, LinearLayout.LayoutParams(dp(76), dp(44)))
+        brandRow.addView(pauseButton, LinearLayout.LayoutParams(dp(55), dp(32)))
+        brandRow.addView(action("SET", false) { showApiSettings() }, LinearLayout.LayoutParams(dp(36), dp(32)).apply { leftMargin = dp(5) })
         header.addView(brandRow)
-        val liveRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(16), 0, 0) }
+        val liveRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, 0) }
         status = micro("STARTING CAMERA", cyan).apply {
-            background = surface(0xCC071C24.toInt(), 20); setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = surface(0xCC071C24.toInt(), 20); setPadding(dp(8), dp(5), dp(8), dp(5)); textSize = 8f
         }
         liveRow.addView(status)
-        telemetry = micro("100 OBJECT LIBRARY", muted).apply { gravity = Gravity.END }
+        telemetry = micro("100 OBJECT LIBRARY", muted).apply { gravity = Gravity.END; textSize = 8f }
         liveRow.addView(telemetry, LinearLayout.LayoutParams(0, -2, 1f)); header.addView(liveRow)
-        root.addView(header, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { setMargins(dp(20), dp(18), dp(20), 0) })
+        root.addView(header, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { setMargins(dp(12), dp(10), dp(12), 0) })
         val dock = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; background = surface(0xEC081923.toInt(), 24, 0x334F7D8D)
-            setPadding(dp(16), dp(16), dp(16), dp(12)); elevation = dp(12).toFloat()
+            orientation = LinearLayout.VERTICAL; background = surface(0xE8081923.toInt(), 18, 0x334F7D8D)
+            setPadding(dp(10), dp(8), dp(10), dp(8)); elevation = dp(8).toFloat()
         }
         val targetRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         targetImage = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP; background = surface(0xFF102C37.toInt(), 12, 0x444F7D8D)
             clipToOutline = true; contentDescription = "Selected object live thumbnail"; setImageResource(R.drawable.ic_hocus)
         }
-        targetRow.addView(targetImage, LinearLayout.LayoutParams(dp(64), dp(64)))
-        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, 0, 0) }
-        info.addView(micro("TARGET INTELLIGENCE", cyan))
-        targetName = label("Choose your target", 20f, white).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        targetRow.addView(targetImage, LinearLayout.LayoutParams(dp(36), dp(36)))
+        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(9), 0, 0, 0) }
+        targetName = label("Tap an object to lock", 14f, white).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         info.addView(targetName)
-        targetInfo = micro("TAP AN OBJECT OR LOCK THE CENTER", muted).apply { maxLines = 2; textSize = 9f }
+        targetInfo = micro("LOCAL TRACKING / SET FOR GEMINI", muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; textSize = 8f }
         info.addView(targetInfo)
         confidence = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100; progressTintList = ColorStateList.valueOf(cyan)
             progressBackgroundTintList = ColorStateList.valueOf(0xFF173540.toInt())
         }
-        info.addView(confidence, LinearLayout.LayoutParams(-1, dp(3)).apply { topMargin = dp(7) })
+        info.addView(confidence, LinearLayout.LayoutParams(-1, dp(2)).apply { topMargin = dp(3) })
         targetRow.addView(info, LinearLayout.LayoutParams(0, -2, 1f)); dock.addView(targetRow)
-        val zoomRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, dp(4)) }
+        expandedTools = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        val zoomRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(5), 0, 0) }
         zoomLabel = micro("1.0x", white).apply { gravity = Gravity.CENTER_VERTICAL; setOnClickListener { resetZoom() }; contentDescription = "Reset zoom to 1x" }
-        zoomRow.addView(zoomLabel, LinearLayout.LayoutParams(dp(44), dp(40)))
+        zoomRow.addView(zoomLabel, LinearLayout.LayoutParams(dp(40), dp(30)))
         zoom = SeekBar(this).apply {
             max = 100; isEnabled = false; progressTintList = ColorStateList.valueOf(cyan)
             thumbTintList = ColorStateList.valueOf(cyan); progressBackgroundTintList = ColorStateList.valueOf(0xFF24404C.toInt())
@@ -187,35 +212,61 @@ class MainActivity : ComponentActivity() {
                 if (fromUser) camera?.cameraControl?.setLinearZoom(value / 100f)
             }
         })
-        zoomRow.addView(zoom, LinearLayout.LayoutParams(0, dp(40), 1f)); zoomRow.addView(micro("ZOOM", muted)); dock.addView(zoomRow)
-        val actions = LinearLayout(this)
-        actions.addView(action("LOCK CENTER", true) {
+        zoomRow.addView(zoom, LinearLayout.LayoutParams(0, dp(30), 1f)); zoomRow.addView(micro("ZOOM", muted)); expandedTools.addView(zoomRow)
+        val actions = LinearLayout(this).apply { setPadding(0, dp(7), 0, 0) }
+        actions.addView(action("LOCK", true) {
             if (scanning) requestManual(hud.boxAround(hud.width / 2f, hud.height / 2f))
-        }, LinearLayout.LayoutParams(0, dp(46), 1.35f))
-        actions.addView(action("TEACH", false) { teachTarget() }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(8) })
-        actions.addView(action("LIBRARY", false) { showLibrary() }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(8) })
+        }, LinearLayout.LayoutParams(0, dp(34), 1f))
+        actions.addView(action("ANALYZE", false) { requestOnline(false) }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(5) })
+        actions.addView(action("PATH", false) { requestOnline(true) }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(5) })
+        actions.addView(action("TOOLS", false) { expandedTools.visibility = if (expandedTools.visibility == View.GONE) View.VISIBLE else View.GONE }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(5) })
         dock.addView(actions)
+        val secondary = LinearLayout(this)
+        secondary.addView(action("TEACH", false) { teachTarget() }, LinearLayout.LayoutParams(0, dp(32), 1f))
+        secondary.addView(action("LIBRARY", false) { showLibrary() }, LinearLayout.LayoutParams(0, dp(32), 1f).apply { leftMargin = dp(5) })
+        expandedTools.addView(secondary)
         val footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(10), 0, 0) }
-        footer.addView(micro("ON DEVICE  /  OFFLINE", muted), LinearLayout.LayoutParams(0, -2, 1f))
+        footer.addView(micro("LOCAL / AI ON TAP", muted), LinearLayout.LayoutParams(0, -2, 1f))
         assistButton = micro(if (assisted) "ASSIST ON" else "ASSIST OFF", cyan).apply {
             setPadding(dp(12), dp(8), 0, dp(8)); setOnClickListener { toggleAssisted() }; contentDescription = "Toggle assisted learning"
         }
-        footer.addView(assistButton); dock.addView(footer)
-        root.addView(dock, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { setMargins(dp(16), 0, dp(16), dp(16)) })
+        footer.addView(assistButton); expandedTools.addView(footer); dock.addView(expandedTools)
+        root.addView(dock, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { setMargins(dp(8), 0, dp(8), dp(8)) })
+        val nightRail = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        nightButton = action(if (nightMode) "NIGHT ON" else "NIGHT", false) {
+            nightMode = !nightMode; getPreferences(MODE_PRIVATE).edit().putBoolean("night", nightMode).apply(); applyNightMode()
+        }
+        lampButton = action("LAMP", false) { toggleLamp() }
+        nightRail.addView(nightButton, LinearLayout.LayoutParams(dp(58), dp(32)))
+        nightRail.addView(lampButton, LinearLayout.LayoutParams(dp(58), dp(32)).apply { topMargin = dp(6) })
+        root.addView(nightRail, FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(8) })
+        platePopup = micro("", 0xFFFFCD74.toInt()).apply {
+            visibility = View.GONE; textSize = 10f; maxLines = 3
+            background = surface(0xED16212A.toInt(), 12, 0x77FFCD74); setPadding(dp(10), dp(8), dp(10), dp(8))
+            setOnClickListener { plateMutedUntil = SystemClock.elapsedRealtime() + 8000; visibility = View.GONE }
+            contentDescription = "Vehicle plate popup. Tap to dismiss."
+        }
+        root.addView(platePopup, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply { setMargins(dp(12), dp(82), dp(12), 0) })
         permissionButton = action("ENABLE CAMERA", true) { requestCamera() }.apply { visibility = View.GONE }
         root.addView(permissionButton, FrameLayout.LayoutParams(dp(220), dp(54), Gravity.CENTER))
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val safe = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             (header.layoutParams as FrameLayout.LayoutParams).apply { topMargin = safe.top + dp(10); header.layoutParams = this }
             (dock.layoutParams as FrameLayout.LayoutParams).apply { bottomMargin = safe.bottom + dp(10); dock.layoutParams = this }
-            hud.safeTop = safe.top + dp(115); hud.safeBottom = safe.bottom + dp(260)
+            hud.safeTop = safe.top + dp(80); hud.safeBottom = safe.bottom + dp(110)
             insets
         }
+        header.addOnLayoutChangeListener { _, _, _, _, bottom, _, _, _, _ ->
+            hud.safeTop = bottom + dp(8)
+            (platePopup.layoutParams as FrameLayout.LayoutParams).apply { topMargin = bottom + dp(8); platePopup.layoutParams = this }
+        }
+        dock.addOnLayoutChangeListener { _, _, top, _, _, _, _, _, _ -> hud.safeBottom = root.height - top + dp(8) }
         setContentView(root)
         WindowInsetsControllerCompat(window, root).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             hide(WindowInsetsCompat.Type.systemBars())
         }
+        preview.setLayerType(View.LAYER_TYPE_HARDWARE, if (nightMode) Paint().apply { colorFilter = NightVision.previewFilter } else null)
     }
 
     private fun requestManual(box: Box?) {
@@ -228,6 +279,7 @@ class MainActivity : ComponentActivity() {
         scanning = !scanning; generation.incrementAndGet(); selectedId = null; resetRequested = true
         manualRequest.set(null)
         displayCapture = null; hud.selectedId = null; hud.thumbnail = null; hud.targets = emptyList()
+        platePopup.visibility = View.GONE; plateReadings.clear(); hud.plateLabels = emptyMap()
         pauseButton.text = if (scanning) "PAUSE" else "RESUME"
         status.text = if (scanning) "SCANNING" else "SCAN PAUSED"
         targetName.text = if (scanning) "Choose your target" else "Scan paused"
@@ -253,7 +305,7 @@ class MainActivity : ComponentActivity() {
                 hud.mirrored = selector == CameraSelector.DEFAULT_FRONT_CAMERA
                 val livePreview = Preview.Builder().build().also { it.surfaceProvider = preview.surfaceProvider }
                 val resolution = ResolutionSelector.Builder().setResolutionStrategy(ResolutionStrategy(
-                    android.util.Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)).build()
+                    android.util.Size(1280, 960), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)).build()
                 val analyzer = ImageAnalysis.Builder().setResolutionSelector(resolution)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                 analysis = analyzer
@@ -269,6 +321,7 @@ class MainActivity : ComponentActivity() {
                     } finally { frame.close() }
                 }
                 cameraProvider.unbindAll(); camera = cameraProvider.bindToLifecycle(this, selector, livePreview, analyzer)
+                camera?.cameraInfo?.cameraState?.observe(this) { state -> if (state.type == CameraState.Type.OPEN) applyNightMode() }
                 camera?.cameraInfo?.zoomState?.observe(this) { state ->
                     zoom.isEnabled = state.maxZoomRatio > state.minZoomRatio; zoom.progress = (state.linearZoom * 100).toInt()
                     zoomLabel.text = String.format(Locale.US, "%.1fx", state.zoomRatio)
@@ -283,6 +336,13 @@ class MainActivity : ComponentActivity() {
 
     private fun processFrame(bitmap: Bitmap) {
         val now = SystemClock.elapsedRealtime(); val started = System.nanoTime(); val epoch = generation.get()
+        val rawLight = NightVision.luminance(bitmap)
+        val snapshot = if (now - lastSceneAt > 700) {
+            lastSceneAt = now
+            val image = cropObject(bitmap, Box(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()), 960)
+            val enhanced = if (nightMode && rawLight < 80) NightVision.enhance(image).also { image.recycle() } else image
+            SceneFrame(enhanced, rawLight, now)
+        } else null
         if (resetRequested || lastImageSize != (bitmap.width to bitmap.height)) {
             tracker.clear(); follower.clear(); workerTracks = emptyList(); followerId = null; manualId = null; featureCapture = null
             resetRequested = false; lastImageSize = bitmap.width to bitmap.height
@@ -307,6 +367,7 @@ class MainActivity : ComponentActivity() {
             observations.add(Observation(located.first, name, located.second, appearance(bitmap, located.first), selectedId))
         }
         val tracks = tracker.update(observations, now, selectedId); workerTracks = tracks
+        plates.scan(bitmap, tracks, now)
         val selected = tracks.firstOrNull { it.id == selectedId }
         if (selected != null && !selected.predicted && located != null && selected.box.iou(located.first) > 0.2f && detections.any { it.bounds.box().iou(selected.box) > 0.3f }) {
             follower.start(bitmap, selected.box, now)
@@ -337,7 +398,9 @@ class MainActivity : ComponentActivity() {
         uiExecutor.execute {
             if (disposed || !scanning || generation.get() != epoch) return@execute
             hud.imageWidth = frameWidth; hud.imageHeight = frameHeight; hud.targets = targets; hud.selectedId = selectedId
-            telemetry.text = "${targets.count { !it.predicted }} TRACKS  /  ${ms}ms"
+            if (snapshot != null) sceneFrame = snapshot
+            hud.plateLabels = plateReadings.mapValues { (_, reading) -> reading.text?.let { (if (reading.confirmed) "OCR " else "? ") + it } ?: "PLATE: SCANNING" }
+            telemetry.text = if (rawLight < 22) "DARK / USE LAMP" else "${targets.count { !it.predicted }} TRACKS / ${ms}ms"
             val active = targets.firstOrNull { it.id == selectedId }
             if (active == null && selectedId != null) {
                 selectedId = null; hud.selectedId = null; hud.thumbnail = null; displayCapture = null
@@ -346,11 +409,14 @@ class MainActivity : ComponentActivity() {
             } else if (active != null) {
                 status.text = if (active.predicted) "REACQUIRING" else "TARGET LOCKED"; targetName.text = title(active.label)
                 if (capture != null && capture.id == selectedId) {
-                    displayCapture = capture; targetImage.setImageBitmap(capture.image); hud.thumbnail = capture.image
+                    if (displayCapture !== capture) {
+                        displayCapture = capture; targetImage.setImageBitmap(capture.image); hud.thumbnail = capture.image
+                    }
                     targetInfo.text = "TRACK ${active.id} / ${if (active.predicted) "PREDICTED POSITION" else capture.subtitle}"
                     confidence.progress = (capture.confidence * 100).toInt()
                 }
             } else status.text = "SCANNING"
+            if (onlineBusy.get()) status.text = "GEMINI / WORKING"
             if (savedClasses != null) { learned = savedClasses; report("Added a new confirmed-object view to memory") }
         }
     }
@@ -396,7 +462,7 @@ class MainActivity : ComponentActivity() {
                                 val entry = catalog[index]
                                 AlertDialog.Builder(this).setTitle(title(entry.name))
                                     .setMessage(if (entry.mode == "scene") "Detected automatically in the live camera view."
-                                        else "Center this object, tap Lock Center, and hold steady. Focus recognition works on the selected crop.")
+                                        else "Center this object, tap Lock, and hold steady. Focus recognition works on the selected crop.")
                                     .setPositiveButton("Got it", null).show()
                             }.setNegativeButton("Close", null).show()
                     }
@@ -433,6 +499,164 @@ class MainActivity : ComponentActivity() {
         assistButton.text = if (assisted) "ASSIST ON" else "ASSIST OFF"
         report(if (assisted) "Assisted learning on: requires three taught angles per object." else "Assisted learning paused. Taught examples are kept.")
     }
+    private fun applyNightMode() {
+        val version = ++nightConfigVersion
+        nightButton.text = if (nightMode) "NIGHT ON" else "NIGHT"
+        preview.setLayerType(View.LAYER_TYPE_HARDWARE, if (nightMode) Paint().apply { colorFilter = NightVision.previewFilter } else null)
+        val active = camera ?: return
+        fun exposureFallback() {
+            val exposure = active.cameraInfo.exposureState
+            if (exposure.isExposureCompensationSupported) {
+                val step = exposure.exposureCompensationStep.toFloat()
+                val index = if (nightMode && step > 0) (0.7f / step).toInt().coerceIn(exposure.exposureCompensationRange.lower, exposure.exposureCompensationRange.upper) else 0
+                active.cameraControl.setExposureCompensationIndex(index)
+            }
+        }
+        fun configureBoost() {
+            if (disposed || version != nightConfigVersion) return
+            if (active.cameraInfo.isLowLightBoostSupported) {
+                val future = active.cameraControl.enableLowLightBoostAsync(nightMode && !lampOn)
+                future.addListener({ if (!disposed && version == nightConfigVersion) runCatching { future.get() }.onFailure { exposureFallback() } }, uiExecutor)
+            } else exposureFallback()
+        }
+        if (active.cameraInfo.hasFlashUnit()) {
+            val requested = lampOn
+            val torch = active.cameraControl.enableTorch(requested)
+            torch.addListener({
+                if (!disposed && version == nightConfigVersion) {
+                    runCatching { torch.get() }.onFailure { lampOn = false; report("Lamp unavailable on this camera.") }
+                    lampButton.text = if (lampOn) "LAMP ON" else "LAMP"
+                    configureBoost()
+                }
+            }, uiExecutor)
+        } else configureBoost()
+    }
+    private fun toggleLamp() {
+        if (camera?.cameraInfo?.hasFlashUnit() != true) { report("This camera has no lamp. Use an external light."); return }
+        lampOn = !lampOn; applyNightMode()
+    }
+    private fun receivePlate(reading: PlateReading) {
+        if (hud.targets.none { it.id == reading.id && !it.predicted }) return
+        plateReadings[reading.id] = reading
+        val liveIds = hud.targets.mapNotNull { it.id }.toSet()
+        plateReadings.keys.retainAll(liveIds)
+        hud.plateLabels = plateReadings.mapValues { (_, p) -> p.text?.let { (if (p.confirmed) "OCR " else "? ") + it } ?: "PLATE: SCANNING" }
+        val key = "${reading.id}:${reading.text}:${reading.confirmed}"
+        if (SystemClock.elapsedRealtime() < plateMutedUntil) return
+        if (key == platePopupKey && platePopup.visibility != View.VISIBLE) return
+        platePopup.text = "${reading.vehicle.uppercase()} #${reading.id}  /  ${reading.text ?: "PLATE SCAN"}\n${reading.state}"
+        if (key != platePopupKey) {
+            platePopupKey = key
+            platePopup.visibility = View.VISIBLE
+            plateHide?.let { platePopup.removeCallbacks(it) }
+            plateHide = Runnable { platePopup.visibility = View.GONE }.also { platePopup.postDelayed(it, 5000) }
+        }
+    }
+    private fun showApiSettings() {
+        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(4)) }
+        val hasKey = runCatching { apiStore.load() != null }.getOrDefault(false)
+        form.addView(label("Images go to Google only when Analyze or Path is tapped. Model quotas and charges depend on your account.", 12f, muted))
+        val key = EditText(this).apply {
+            hint = if (hasKey) "Key saved — leave blank to keep" else "Paste Gemini API key"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            if (android.os.Build.VERSION.SDK_INT >= 26) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        }
+        val model = EditText(this).apply { hint = "Gemini image-capable model"; setSingleLine(true); setText(apiStore.model) }
+        val allow = CheckBox(this).apply { text = "Allow these requested image uploads to Google"; isChecked = apiStore.consent }
+        form.addView(key); form.addView(model); form.addView(allow)
+        form.addView(action("REMOVE SAVED KEY", false) {
+            runCatching { apiStore.clear(); key.setText(""); allow.isChecked = false }.onFailure { report("Could not remove key.") }
+        }, LinearLayout.LayoutParams(-1, dp(34)))
+        val dialog = AlertDialog.Builder(this).setTitle("Gemini settings").setView(ScrollView(this).apply { addView(form) })
+            .setNegativeButton("Close", null).setNeutralButton("Test / Models", null).setPositiveButton("Save", null).create()
+        dialog.setOnShowListener {
+            dialog.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                runCatching {
+                    require(ApiKeyStore.validModel(model.text.toString().trim())) { "Enter a valid Gemini model ID." }
+                    if (key.text.isNotBlank()) apiStore.save(key.text.toString())
+                    require(apiStore.load() != null) { "Enter your API key first." }
+                    apiStore.model = model.text.toString().trim(); apiStore.consent = allow.isChecked
+                }.onSuccess { key.setText(""); dialog.dismiss(); report("Gemini settings saved on this device.") }
+                    .onFailure { report(it.localizedMessage ?: "Could not save Gemini settings.") }
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                val value = key.text.toString().trim().ifBlank { runCatching { apiStore.load() }.getOrNull() ?: "" }
+                if (value.length < 16) report("Enter your API key first.")
+                else if (!onlineBusy.compareAndSet(false, true)) report("An online request is already running.")
+                else networkWorker.execute {
+                    try {
+                        val models = gemini.models(value)
+                        uiExecutor.execute {
+                            if (!disposed && dialog.isShowing) {
+                                if (models.isEmpty()) report("Key accepted, but no supported models were listed.")
+                                else AlertDialog.Builder(this).setTitle("Available models — quotas vary")
+                                    .setItems(models.toTypedArray()) { _, index -> model.setText(models[index]) }.setNegativeButton("Close", null).show()
+                            }
+                        }
+                    } catch (error: Exception) { report(error.localizedMessage ?: "Gemini connection failed.") }
+                    finally { onlineBusy.set(false) }
+                }
+            }
+        }
+        dialog.show()
+    }
+    private fun requestOnline(pathScan: Boolean) {
+        if (!scanning) { report("Resume scanning first."); return }
+        val scene = sceneFrame
+        if (scene == null || SystemClock.elapsedRealtime() - scene.time > 2000) { report("Wait for a fresh camera frame."); return }
+        if (pathScan && scene.light < 22) {
+            AlertDialog.Builder(this).setTitle("Too dark to inspect a path")
+                .setMessage("Stop and turn on the lamp or use an external light. Floor and stairs cannot be reliably inferred from darkness.")
+                .setPositiveButton("Lamp") { _, _ -> if (!lampOn) toggleLamp() }.setNegativeButton("Close", null).show()
+            return
+        }
+        val key = runCatching { apiStore.load() }.getOrNull()
+        if (key == null) { showApiSettings(); return }
+        if (!apiStore.consent) {
+            AlertDialog.Builder(this).setTitle(if (pathScan) "Send path snapshot to Gemini?" else "Send image to Gemini?")
+                .setMessage("Google will receive ${if (pathScan) "the full camera snapshot" else "the selected object crop, or full frame if nothing is selected"}. Path findings are uncertain snapshot observations, not safe walking directions.")
+                .setPositiveButton("Allow and analyze") { _, _ -> apiStore.consent = true; requestOnline(pathScan) }.setNegativeButton("Cancel", null).show()
+            return
+        }
+        if (!onlineBusy.compareAndSet(false, true)) { report("Gemini is still analyzing the previous request."); return }
+        val target = displayCapture?.takeIf { it.id == selectedId && SystemClock.elapsedRealtime() - it.time < 1500 && hud.targets.any { track -> track.id == it.id && !track.predicted } }
+        val image = (if (!pathScan && target != null) target.image else scene.image).copy(Bitmap.Config.ARGB_8888, false)
+        val captured = if (!pathScan && target != null) target.time else scene.time
+        val model = apiStore.model
+        status.text = if (pathScan) "PATH SNAPSHOT / ANALYZING" else "GEMINI / ANALYZING"
+        report(if (pathScan) "Stop and hold still. Analyzing a snapshot, not a live route." else "Analyzing requested image with Gemini.")
+        networkWorker.execute {
+            try {
+                val response = gemini.analyze(image, key, model, pathScan)
+                val analysis = if (pathScan) SceneAnalysis.parse(response) else null
+                uiExecutor.execute {
+                    if (disposed || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) { image.recycle(); return@execute }
+                    showCloudResult(image, response, analysis, captured)
+                }
+            } catch (error: Exception) { image.recycle(); report(error.localizedMessage ?: "Gemini analysis failed. Local tracking remains available.") }
+            finally { onlineBusy.set(false) }
+        }
+    }
+    private fun showCloudResult(image: Bitmap, response: JSONObject, scene: SceneAnalysis?, captured: Long) {
+        val scroll = ScrollView(this)
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(4), dp(14), dp(8)) }
+        val age = (SystemClock.elapsedRealtime() - captured) / 1000
+        column.addView(label("SNAPSHOT / captured ${age}s ago", 10f, cyan))
+        if (scene != null) {
+            column.addView(SceneMapView(this, image, scene), LinearLayout.LayoutParams(-1, dp(300)))
+            column.addView(label(scene.guidance, 15f, 0xFFFFCD74.toInt()))
+            column.addView(label("Relative image sketch only. Cyan = floor-like region, amber = possible hazard. No distances or safe route.", 11f, muted))
+        } else column.addView(ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageBitmap(image) }, LinearLayout.LayoutParams(-1, dp(170)))
+        val lines = response.optJSONArray("details")
+        val details = if (lines == null) "" else (0 until minOf(lines.length(), 5)).joinToString("\n") { "• ${lines.optString(it).take(250)}" }
+        column.addView(label((scene?.summary ?: response.optString("summary").take(800)) + "\n" + details + "\n" + response.optString("uncertainty").take(400), 14f, white))
+        column.addView(micro("AI OBSERVATIONS / VERIFY DIRECTLY", muted))
+        scroll.addView(column)
+        AlertDialog.Builder(this).setTitle(if (scene == null) "Gemini analysis" else "Path snapshot — not navigation")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
     private fun focusAt(x: Float, y: Float) {
         camera?.cameraControl?.startFocusAndMetering(FocusMeteringAction.Builder(preview.meteringPointFactory.createPoint(x, y)).build())
     }
@@ -443,7 +667,9 @@ class MainActivity : ComponentActivity() {
     private fun report(message: String) { uiExecutor.execute { if (!disposed) Toast.makeText(this, message, Toast.LENGTH_LONG).show() } }
     override fun onDestroy() {
         disposed = true; analysis?.clearAnalyzer(); provider?.unbindAll()
-        executor.execute { if (detectorDelegate.isInitialized()) detector.close(); if (classifierDelegate.isInitialized()) classifier.close() }
+        plateHide?.let { platePopup.removeCallbacks(it) }
+        executor.execute { if (detectorDelegate.isInitialized()) detector.close(); if (classifierDelegate.isInitialized()) classifier.close(); if (plateDelegate.isInitialized()) plates.close() }
+        networkWorker.shutdownNow()
         executor.shutdown(); super.onDestroy()
     }
     private fun title(value: String) = value.replaceFirstChar { it.uppercase() }

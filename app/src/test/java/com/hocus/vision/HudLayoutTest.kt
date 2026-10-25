@@ -74,6 +74,8 @@ class HudLayoutTest {
         assertTrue(header.bottom < dock.top)
         assertTrue(dock.bottom <= 2400)
         assertTrue(dock.top > 1200)
+        assertTrue("Collapsed controls must leave more camera space", dock.height < 130 * root.resources.displayMetrics.density)
+        assertTrue("At least 70% of vertical space remains between controls", (dock.top - header.bottom).toFloat() / root.height > 0.70f)
     }
     @Test fun manualTargetMapsInsideImageForRearAndMirroredFrontCamera() {
         val hud = HudView(RuntimeEnvironment.getApplication()) { _, _, _ -> }

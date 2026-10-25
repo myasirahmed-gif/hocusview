@@ -13,6 +13,7 @@ class HudView(context: Context, private val onTarget: (Target?, Float, Float) ->
     var imageHeight = 0
     var mirrored = false
     var thumbnail: Bitmap? = null
+    var plateLabels: Map<Int, String> = emptyMap()
     var safeTop = 0
     var safeBottom = 0
     private val density = resources.displayMetrics.density
@@ -23,6 +24,8 @@ class HudView(context: Context, private val onTarget: (Target?, Float, Float) ->
     private val amber = Color.rgb(255, 205, 116)
     private var downX = 0f
     private var downY = 0f
+    private var shade: Shader? = null
+    private val dashed = DashPathEffect(floatArrayOf(5 * density, 5 * density), 0f)
     init { contentDescription = "Camera tracking view. Tap an object to lock; tap an empty area to track a new object." }
     private fun screenBox(box: RectF): RectF {
         if (imageWidth == 0 || imageHeight == 0) return RectF()
@@ -43,10 +46,14 @@ class HudView(context: Context, private val onTarget: (Target?, Float, Float) ->
     }
     fun centerTarget(): Target? = targets.filter { !it.predicted && screenBox(it.bounds).contains(width / 2f, height / 2f) }
         .minByOrNull { it.bounds.width() * it.bounds.height() }
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        shade = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(0xC0031018.toInt(), 0x00031018, 0x00031018, 0xD0031018.toInt()),
+            floatArrayOf(0f, 0.16f, 0.82f, 1f), Shader.TileMode.CLAMP)
+    }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        ink.shader = LinearGradient(0f, 0f, 0f, height.toFloat(), intArrayOf(0xDA031018.toInt(), 0x00031018, 0x00031018, 0xDA031018.toInt()),
-            floatArrayOf(0f, 0.24f, 0.64f, 1f), Shader.TileMode.CLAMP)
+        ink.alpha = 255; ink.shader = shade
         ink.style = Paint.Style.FILL; canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), ink); ink.shader = null
         val cx = width / 2f; val cy = height / 2f
         ink.color = 0x447DEADD; ink.strokeWidth = density; ink.style = Paint.Style.STROKE
@@ -63,7 +70,7 @@ class HudView(context: Context, private val onTarget: (Target?, Float, Float) ->
             ink.color = if (selected) 0x1268F3E0 else Color.TRANSPARENT; ink.style = Paint.Style.FILL
             canvas.drawRoundRect(rect, 6 * density, 6 * density, ink)
             ink.color = color; ink.style = Paint.Style.STROKE; ink.strokeWidth = (if (selected) 2f else 1.2f) * density
-            if (target.predicted) ink.pathEffect = DashPathEffect(floatArrayOf(5 * density, 5 * density), 0f)
+            if (target.predicted) ink.pathEffect = dashed
             val corner = min(20 * density, min(rect.width(), rect.height()) * 0.25f)
             path.reset()
             path.moveTo(rect.left, rect.top + corner); path.lineTo(rect.left, rect.top); path.lineTo(rect.left + corner, rect.top)
@@ -79,6 +86,15 @@ class HudView(context: Context, private val onTarget: (Target?, Float, Float) ->
             ink.style = Paint.Style.FILL; ink.color = 0xE4081B24.toInt()
             canvas.drawRoundRect(RectF(lx, ly, lx + labelWidth, ly + 22 * density), 5 * density, 5 * density, ink)
             ink.color = color; canvas.drawText(text, lx + 8 * density, ly + 15 * density, ink)
+            plateLabels[target.id]?.let { plate ->
+                val plateText = plate.take(28)
+                ink.textSize = 10 * density
+                val textWidth = ink.measureText(plateText) + 14 * density
+                val px = rect.left.coerceIn(8 * density, max(8 * density, width - textWidth - 8 * density))
+                val py = (rect.bottom + 4 * density).coerceIn(safeTop.toFloat(), max(safeTop.toFloat(), height - safeBottom - 24 * density))
+                ink.color = 0xEC12202A.toInt(); canvas.drawRoundRect(RectF(px, py, px + textWidth, py + 22 * density), 5 * density, 5 * density, ink)
+                ink.color = amber; canvas.drawText(plateText, px + 7 * density, py + 15 * density, ink)
+            }
             if (selected) drawThumbnail(canvas, rect, target, color)
         }
         if (selectedId == null) {
@@ -90,7 +106,7 @@ class HudView(context: Context, private val onTarget: (Target?, Float, Float) ->
     private fun drawThumbnail(canvas: Canvas, box: RectF, target: Target, color: Int) {
         val bitmap = thumbnail ?: return
         if (bitmap.isRecycled) return
-        val cardW = 84 * density; val cardH = 92 * density
+        val cardW = 68 * density; val cardH = 76 * density
         var left = if (box.right + cardW + 20 * density < width) box.right + 16 * density else box.left - cardW - 16 * density
         left = left.coerceIn(10 * density, max(10 * density, width - cardW - 10 * density))
         val top = box.top.coerceIn(safeTop + 30 * density, max(safeTop + 30 * density, height - safeBottom - cardH - 12 * density))
@@ -108,7 +124,7 @@ class HudView(context: Context, private val onTarget: (Target?, Float, Float) ->
             val cropHeight = (bitmap.width / targetRatio).toInt(); Rect(0, (bitmap.height - cropHeight) / 2, bitmap.width, (bitmap.height + cropHeight) / 2)
         }
         ink.style = Paint.Style.FILL; ink.alpha = if (target.predicted) 130 else 255; canvas.drawBitmap(bitmap, src, photo, ink)
-        canvas.restore(); ink.alpha = 255; ink.color = color; ink.typeface = Typeface.MONOSPACE; ink.textSize = 8 * density
+        canvas.restore(); ink.alpha = 255; ink.color = color; ink.typeface = Typeface.MONOSPACE; ink.textSize = 7 * density
         canvas.drawText("VISUAL / ${target.id}", left + 7 * density, top + 14 * density, ink)
         canvas.drawText(if (target.predicted) "REACQUIRING" else "LIVE LOCK", left + 7 * density, top + cardH - 7 * density, ink)
     }
